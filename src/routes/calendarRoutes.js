@@ -5,6 +5,7 @@ const validate = require('../middleware/validate');
 const { apiLimiter } = require('../middleware/limiter');
 const { calendar } = require('../config/googleConfig');
 const googleService = require('../services/googleService');
+const AppError = require('../utils/AppError');
 
 /**
  * Endpoint to sync stadium events with attendee's Google Calendar.
@@ -42,4 +43,5 @@ router.post('/sync',
 });
 
 module.exports = router;
+
 

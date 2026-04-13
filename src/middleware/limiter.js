@@ -9,8 +9,11 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { 
-    error: 'RateLimitExceeded',
-    message: 'Too many requests from this IP, please try again after 15 minutes.' 
+    status: 'error',
+    error: {
+        code: 'RateLimitExceeded',
+        message: 'Too many requests from this IP, please try again after 15 minutes.' 
+    }
   }
 });
 
@@ -21,9 +24,13 @@ const strictLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 20,
   message: { 
-    error: 'StrictRateLimitExceeded',
-    message: 'Administrative limit reached. Please try again in an hour.' 
+    status: 'error',
+    error: {
+        code: 'StrictRateLimitExceeded',
+        message: 'Administrative limit reached. Please try again in an hour.' 
+    }
   }
 });
+
 
 module.exports = { apiLimiter, strictLimiter };

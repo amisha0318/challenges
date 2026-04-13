@@ -17,6 +17,12 @@ const googleService = require('./src/services/googleService');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', err.name, err.message);
+  process.exit(1);
+});
+
 // --- Security Middleware ---
 
 /**
@@ -32,9 +38,7 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter);
 
-/**
- * Content Security Policy to protect against XSS and injection.
- */
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -49,22 +53,16 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-/**
- * CORS Configuration for trusted API interaction.
- */
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
   methods: ['GET', 'POST'],
   credentials: true
 }));
 
-// --- Application Middleware ---
-
 app.use(express.json({ limit: '10kb' })); 
 app.use(express.static('public'));
 
 // --- Routing Layer ---
-
 app.use('/api/venue', venueRoutes);
 app.use('/api/calendar', calendarRoutes);
 
@@ -74,40 +72,47 @@ app.use('/api/calendar', calendarRoutes);
  * Handle 404 Not Found errors.
  */
 app.use((req, res, next) => {
-    const err = new Error('Resource not found');
-    err.status = 404;
-    next(err);
+    const AppError = require('./src/utils/AppError');
+    next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404, 'NOT_FOUND'));
 });
 
 /**
- * Standardized Global Error Handler.
- * Logs structured errors to stdout for Google Cloud Operations.
+ * Global Error Handler.
  */
 app.use((err, req, res, next) => {
-    const statusCode = err.status || 500;
-    const isOperational = statusCode < 500;
+    err.statusCode = err.statusCode || 500;
+    err.status = err.status || 'error';
     
-    googleService.logEvent(isOperational ? 'WARN' : 'ERROR', err.message, { 
+    // Log structured error for Google Cloud Operations
+    googleService.logEvent(err.statusCode >= 500 ? 'ERROR' : 'WARN', err.message, { 
       stack: process.env.NODE_ENV === 'production' ? null : err.stack,
       path: req.path,
       method: req.method,
-      statusCode
+      errorCode: err.errorCode || 'UNEXPECTED_ENGINE_FAILURE'
     });
 
-    res.status(statusCode).json({ 
-      error: err.name || 'VenueEngineException',
-      message: err.message || 'An unexpected error occurred in the Venue Engine.',
-      trackingId: `STAD-${Date.now()}` 
+    res.status(err.statusCode).json({ 
+      status: err.status,
+      error: {
+        code: err.errorCode || 'INTERNAL_ERROR',
+        message: err.message,
+        trackingId: `VN-ERR-${Date.now()}`
+      }
     });
 });
 
-
 // --- Server Lifecycle ---
+const server = app.listen(PORT, () => {
+    console.log(`\x1b[32m[Success]\x1b[0m Venue Engine Active on port ${PORT}`);
+});
 
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`\x1b[32m[Success]\x1b[0m Venue Engine Active on http://localhost:${PORT}`);
+// Handle unhandled rejections
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! 💥 Shutting down...', err.name, err.message);
+  server.close(() => {
+    process.exit(1);
   });
-}
+});
 
 module.exports = app;
+

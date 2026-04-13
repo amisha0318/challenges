@@ -169,15 +169,25 @@ async function getSmartRoute() {
         const panel = document.getElementById('route-panel');
         const text = document.getElementById('route-text');
         
-        text.innerHTML = `Path: <strong>${data.pathIds.join(' → ')}</strong> <br><br>Benefit: <span style="color: var(--secondary)">${data.benefit}</span>`;
+        if (data.error) {
+            showNotification("Optimization Alert", data.error.message);
+            return;
+        }
+
+        const pathStr = data.path.join(' ➔ ');
+        text.innerHTML = `
+            <div style="margin-bottom: 8px">Path: <strong style="color: var(--text)">${pathStr}</strong></div>
+            <div style="font-size: 0.75rem; opacity: 0.9">Insight: <span style="color: var(--secondary)">${data.meta.recommendation}</span></div>
+        `;
         panel.style.display = 'block';
     } catch (error) {
-        showNotification("Error", "Routing computation failed.");
+        showNotification("Error", "Routing engine communication failed.");
     } finally {
         button.disabled = false;
         button.innerHTML = '🚀 Find Smartest Route';
     }
 }
+
 
 /**
  * Synchronizes venue events with Google Calendar.

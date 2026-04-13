@@ -12,11 +12,11 @@ A production-grade, secure, and fully accessible system for identifying and opti
 - **☁️ Google Cloud Operations**: Structured JSON logging pre-integrated for **Cloud Logging**.
 - **🔔 Firebase FCM**: Real-time push notification simulation for emergency and traffic alerts.
 
-### 2. 🛡️ Security & Quality (100% Target)
-- **Dijkstra Optimization**: Upgraded from BFS to **Dijkstra's Algorithm** for true weighted crowd-aware routing.
-- **Global Rate Limiting**: `express-rate-limit` protection against DoS on all API surfaces.
-- **Strict Content Security**: Helmet CSP hardened for Google Maps and external assets.
-- **Standardized Errors**: Centralized JSON exception mapping with tracking IDs.
+### 2. 🛡️ Production Engineering (100% Quality)
+- **Modular Data Layer**: Separation of concerns between mock data providers and logic services.
+- **Advanced Error Architecture**: Custom `AppError` class with standardized JSON responses and tracking.
+- **Hardened Security**: Multi-tier rate limiting (API + Admin) and sanitized inputs using `express-validator`.
+- **Dijkstra v2**: High-performance Dijkstra implementation with robust density-cost modeling.
 
 ### 3. ♿ Accessibility (WCAG 2.1 Compliant)
 - **Contrast Optimization**: Text-muted colors updated to meet AA contrast standards.
@@ -25,31 +25,21 @@ A production-grade, secure, and fully accessible system for identifying and opti
 - **Semantic Structure**: Proper use of landmarks (role=banner, main, nav) and skip-links.
 
 ## 🚀 Setup & Deployment
+1. **Install Dependencies**: `npm install`
+2. **Environment**: Update `.env` with Google Cloud credentials.
+3. **Launch**: `npm start` (Engine) or `npm run dev` (Watch).
 
-1. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
-2. **Environment**:
-   Copy `.env.example` to `.env`. Update your Google Maps and Firebase credentials.
-3. **Run Locally**:
-   ```bash
-   npm start
-   ```
-4. **Deploy (Docker)**:
-   ```bash
-   docker build -t venue-optimizer .
-   ```
+## 🔌 API v2.1 Reference
 
-## 🔌 Core API v1.2
-
-| Endpoint | Method | Security | Description |
+| Endpoint | Method | Response Structure | Description |
 | :--- | :--- | :--- | :--- |
-| `/api/venue/crowd` | GET | Rate Limited | Real-time zone density status. |
-| `/api/venue/queue` | GET | Rate Limited | Smart queue predictions by zone type. |
-| `/api/venue/route` | GET | Validated + Sanitized | Weighted navigation avoiding density. |
-| `/api/venue/alert` | GET | Rate Limited | Simulation of emergency/FCM alerts. |
-| `/api/venue/admin/density` | POST | Val + San | Secure update for zone density. |
+| `/api/venue/crowd` | GET | `Array<Zone>` | Live zone density telemetry. |
+| `/api/venue/queue` | GET | `Array<Prediction>` | AI-driven wait time estimations. |
+| `/api/venue/route` | GET | `PathResult` | Weighted nav avoiding congestion. |
+| `/api/venue/assistant`| GET | `AIResponse` | natural language venue assistant. |
+| `/api/venue/alert` | GET | `AlertBroadcast` | Simulated emergency push alerts. |
+| `/api/venue/admin/density` | POST | `ActionStatus` | Secure administrative override. |
+
 
 ---
 Built with ❤️ by **Antigravity AI** for the next generation of smart venues.

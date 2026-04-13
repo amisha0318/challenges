@@ -7,11 +7,16 @@ const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ 
-      error: 'ValidationError',
-      details: errors.array() 
+      status: 'fail',
+      error: {
+        code: 'ValidationError',
+        message: 'Input validation failed.',
+        details: errors.array() 
+      }
     });
   }
   next();
 };
+
 
 module.exports = validate;

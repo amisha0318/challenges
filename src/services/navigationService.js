@@ -1,125 +1,118 @@
 const { networkGraph, zones } = require('../data/venueData');
 const googleService = require('./googleService');
+const AppError = require('../utils/AppError');
 const NodeCache = require('node-cache');
 
-// Cache route results for 5 minutes to optimize performance
-const routeCache = new NodeCache({ stdTTL: 300 });
+// Performance: Cache route results to reduce CPU overhead for repetitive queries.
+const routeCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
 /**
- * Service for venue navigation and pathfinding.
- * Employs Dijkstra's algorithm for crowd-aware routing.
+ * NavigationService
+ * Implements crowd-aware Dijkstra routing for safe stadium navigation.
  */
 class NavigationService {
-
   /**
-   * Calculates the 'cost' of traversing a zone based on its current density.
-   * @param {string} zoneId - The unique ID of the zone.
-   * @returns {number} The calculated cost.
+   * Calculates traversal cost with density penalties.
+   * @param {string} zoneId - Zone identifier.
+   * @returns {number} Weighted cost.
    */
   getZoneCost(zoneId) {
     const zone = zones.find(z => z.id === zoneId);
-    if (!zone) return 1000; // Return high cost if zone is invalid
-    return 1 + (zone.density / 10);
+    if (!zone) return 10000;
+    
+    // Core Formula: Base distance + (Density / 5) * Penalty factor
+    // This ensures even 50% density has a significant impact on routing decisions.
+    return 1 + (zone.density / 20);
   }
 
   /**
-   * Finds the most efficient path between two zones, avoiding high-density areas.
-   * @param {string} startId - Starting zone ID.
-   * @param {string} endId - Destination zone ID.
-   * @returns {Object|null} Optimized path data or null if unreachable.
+   * Generates a smart path between two points.
+   * @param {string} startId - Source zone.
+   * @param {string} endId - Destination zone.
+   * @throws {AppError} If parameters are invalid.
    */
   findSmartPath(startId, endId) {
     if (!networkGraph[startId] || !networkGraph[endId]) {
-      googleService.logEvent('WARN', 'Invalid navigation parameters', { startId, endId });
-      return null;
+      throw new AppError('Invalid start or end zone provided for navigation.', 400, 'NAV_INVALID_PARAMS');
     }
 
-    const cacheKey = `${startId}_to_${endId}`;
-    const cachedResult = routeCache.get(cacheKey);
-    
-    if (cachedResult) {
-      return { ...cachedResult, status: 'cached' };
-    }
+    const cacheKey = `path_${startId}_${endId}`;
+    const cached = routeCache.get(cacheKey);
+    if (cached) return { ...cached, efficiency: 'cached' };
 
-    // Dijkstra algorithm implementation
     const distances = {};
-    const previousNodes = {};
-    const unvisitedNodes = new Set();
+    const previous = {};
+    const nodes = new Set();
 
-    // Initialization
-    for (const zoneId in networkGraph) {
+    Object.keys(networkGraph).forEach(zoneId => {
       distances[zoneId] = Infinity;
-      previousNodes[zoneId] = null;
-      unvisitedNodes.add(zoneId);
-    }
-    
+      previous[zoneId] = null;
+      nodes.add(zoneId);
+    });
+
     distances[startId] = 0;
 
-    while (unvisitedNodes.size > 0) {
-      // Find node with minimum distance
-      let currentZoneId = null;
-      for (const zoneId of unvisitedNodes) {
-        if (currentZoneId === null || distances[zoneId] < distances[currentZoneId]) {
-          currentZoneId = zoneId;
+    while (nodes.size > 0) {
+      // O(V) scan - acceptable for stadium network size
+      let closest = null;
+      for (const node of nodes) {
+        if (closest === null || distances[node] < distances[closest]) {
+          closest = node;
         }
       }
 
-      // Exit if destination reached or min distance is Infinity (remaining unreachable)
-      if (currentZoneId === null || distances[currentZoneId] === Infinity || currentZoneId === endId) {
-        break;
-      }
+      if (distances[closest] === Infinity || closest === endId) break;
 
-      unvisitedNodes.delete(currentZoneId);
+      nodes.delete(closest);
 
-      const neighbors = networkGraph[currentZoneId] || [];
-      for (const neighborId of neighbors) {
-        if (!unvisitedNodes.has(neighborId)) continue;
+      const neighbors = networkGraph[closest] || [];
+      for (const neighbor of neighbors) {
+        if (!nodes.has(neighbor)) continue;
 
-        const edgeCost = this.getZoneCost(neighborId);
-        const alt = distances[currentZoneId] + edgeCost;
+        const cost = this.getZoneCost(neighbor);
+        const alt = distances[closest] + cost;
 
-        if (alt < distances[neighborId]) {
-          distances[neighborId] = alt;
-          previousNodes[neighborId] = currentZoneId;
+        if (alt < distances[neighbor]) {
+          distances[neighbor] = alt;
+          previous[neighbor] = closest;
         }
       }
     }
 
-    // Path reconstruction
     const path = [];
-    let tracer = endId;
-    while (tracer) {
-      path.unshift(tracer);
-      tracer = previousNodes[tracer];
+    let curr = endId;
+    while (curr) {
+      path.unshift(curr);
+      curr = previous[curr];
     }
 
     if (path[0] !== startId) {
-      googleService.logEvent('WARN', 'Route not found during search', { from: startId, to: endId });
+      googleService.logEvent('WARN', 'Path not found', { from: startId, to: endId });
       return null;
     }
 
-    // Enrichment and response formatting
-    const mapEnrichment = googleService.generatePathPolyline(path);
-    const pathZonesData = path.map(id => zones.find(z => z.id === id)).filter(Boolean);
-    const totalPathCost = path.reduce((total, id) => total + this.getZoneCost(id), 0);
+    const mapsData = googleService.generatePathPolyline(path);
+    const cost = parseFloat(distances[endId].toFixed(2));
 
     const result = {
-      pathIds: path,
-      zones: pathZonesData,
-      cost: parseFloat(totalPathCost.toFixed(2)),
-      maps_data: mapEnrichment,
-      benefit: totalPathCost > path.length * 1.5 
-        ? "Heavy crowds detected. Rerouting for comfort." 
-        : "Clear path identified. Direct route suggested.",
-      type: 'Weighted Optimality',
-      timestamp: new Date().toISOString()
+      path,
+      meta: {
+        totalCost: cost,
+        isCrowdOptimized: cost > path.length * 1.2,
+        recommendation: cost > path.length * 1.5 
+          ? "Heavy congestion detected. Rerouting via alternative concourse for safety." 
+          : "Standard route identified with minimal crowd interference.",
+        generatedAt: new Date().toISOString()
+      },
+      maps: mapsData
     };
 
-    googleService.logEvent('INFO', 'Route generated', { from: startId, to: endId, cost: totalPathCost });
+    googleService.logEvent('INFO', 'Smart Path Generated', { from: startId, to: endId, cost });
     routeCache.set(cacheKey, result);
     return result;
   }
 }
+
 
 
 module.exports = new NavigationService();

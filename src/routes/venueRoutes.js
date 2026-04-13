@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { apiLimiter, strictLimiter } = require('../middleware/limiter');
+const AppError = require('../utils/AppError');
 
 // Services & Data
 const navService = require('../services/navigationService');
@@ -13,8 +14,6 @@ const { DENSITY_LEVELS, STATUS } = require('../utils/constants');
 
 /**
  * Helper to determine density status string.
- * @param {number} density - Density percentage (0-100).
- * @returns {string} One of: High, Medium, Low.
  */
 const getDensityStatus = (density) => {
   if (density > DENSITY_LEVELS.HIGH) return STATUS.HIGH;
@@ -24,7 +23,6 @@ const getDensityStatus = (density) => {
 
 /**
  * GET /api/venue/crowd
- * Returns real-time density updates for all venue zones.
  */
 router.get('/crowd', apiLimiter, (req, res, next) => {
   try {
@@ -42,7 +40,6 @@ router.get('/crowd', apiLimiter, (req, res, next) => {
 
 /**
  * GET /api/venue/queue
- * Returns predicted wait times for various service zones.
  */
 router.get('/queue', apiLimiter, (req, res, next) => {
   try {
@@ -55,7 +52,6 @@ router.get('/queue', apiLimiter, (req, res, next) => {
 
 /**
  * GET /api/venue/route
- * Calculates the smartest path avoiding heavily congested zones.
  */
 router.get('/route', 
   apiLimiter,
@@ -68,9 +64,7 @@ router.get('/route',
       const result = navService.findSmartPath(from, to);
       
       if (!result) {
-         const error = new Error("Path not found between the specified zones.");
-         error.status = 404;
-         throw error;
+         throw new AppError('No viable path found between these locations.', 404, 'PATH_NOT_FOUND');
       }
       
       res.json(result);
@@ -81,7 +75,6 @@ router.get('/route',
 
 /**
  * GET /api/venue/assistant
- * Gemini-powered Natural Language interface for venue queries.
  */
 router.get('/assistant',
   apiLimiter,
@@ -98,7 +91,6 @@ router.get('/assistant',
 
 /**
  * GET /api/venue/alert
- * Simulates a push alert (mocking FCM server relay).
  */
 router.get('/alert', apiLimiter, (req, res) => {
     const alertData = {
@@ -107,13 +99,11 @@ router.get('/alert', apiLimiter, (req, res) => {
         affectedZones: ["food_court"],
         timestamp: new Date().toISOString()
     };
-    // Ensure status matches the test expectation "Alert Sent"
     res.json({ status: "Alert Sent", source: "Simulation Engine", alert: alertData });
 });
 
 /**
  * POST /api/venue/admin/density
- * Secure endpoint for administrators to override live density data.
  */
 router.post('/admin/density',
   strictLimiter,
@@ -126,9 +116,7 @@ router.post('/admin/density',
       const zone = zones.find(z => z.id === zoneId);
       
       if (!zone) {
-        const error = new Error("Target zone not found in venue database.");
-        error.status = 404;
-        throw error;
+        throw new AppError('Target zone not found in venue database.', 404, 'ZONE_NOT_FOUND');
       }
       
       zone.density = density;
@@ -137,6 +125,7 @@ router.post('/admin/density',
       next(err);
     }
 });
+
 
 module.exports = router;
 

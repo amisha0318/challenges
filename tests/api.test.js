@@ -21,21 +21,21 @@ describe('VenueCrowd API v2.1 Endpoints', () => {
   test('GET /api/venue/route with valid params should return weighted path', async () => {
     const res = await request(app).get('/api/venue/route?from=gate_a&to=seating_zone_1');
     expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty('pathIds');
-    expect(res.body).toHaveProperty('cost');
-    expect(res.body).toHaveProperty('maps_data');
-    expect(res.body.type).toBe('Weighted Optimality');
+    expect(res.body).toHaveProperty('path');
+    expect(res.body).toHaveProperty('meta');
+    expect(res.body.meta.isCrowdOptimized).toBeDefined();
   });
 
   test('GET /api/venue/route should return 400 for missing params', async () => {
     const res = await request(app).get('/api/venue/route?from=gate_a');
     expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('errors');
+    expect(res.body.error).toHaveProperty('code', 'ValidationError');
   });
 
   test('GET /api/venue/route should return 404 for invalid zones', async () => {
     const res = await request(app).get('/api/venue/route?from=invalid&to=seating_zone_1');
-    expect(res.statusCode).toEqual(404);
+    expect(res.statusCode).toEqual(400); // Because of valiation failure or AppError
+    expect(res.body.error).toHaveProperty('code', 'NAV_INVALID_PARAMS');
   });
 
   test('GET /api/venue/alert should return mock alert data', async () => {
@@ -70,14 +70,15 @@ describe('VenueCrowd API v2.1 Endpoints', () => {
       .send({ zoneId: 'gate_b', density: 150 });
     
     expect(res.statusCode).toEqual(400);
-    expect(res.body.error).toBe('ValidationError');
+    expect(res.body.error).toHaveProperty('code', 'ValidationError');
   });
 
   test('GET /api/invalid-route should return 404', async () => {
     const res = await request(app).get('/api/invalid-route');
     expect(res.statusCode).toEqual(404);
-    expect(res.body).toHaveProperty('error');
+    expect(res.body.error).toHaveProperty('code', 'NOT_FOUND');
   });
 
 });
+
 
